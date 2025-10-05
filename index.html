@@ -457,12 +457,6 @@
                         <span>→</span> 0% from last period
                     </div>
                 </div>
-
-                <div class="stat-card">
-                    <div class="stat-label">Crude Birth Rate</div>
-                    <div class="stat-value" id="birthRate">0</div>
-                    <div class="stat-change">per 1,000 population</div>
-                </div>
             </div>
 
             <!-- Birth Analysis Section -->
@@ -500,20 +494,20 @@
                 </div>
 
                 <div class="chart-card">
-                    <div class="chart-title">Births by Sex & Place of Delivery</div>
-                    <canvas id="birthPlaceChart"></canvas>
+                    <div class="chart-title">Births by Gender</div>
+                    <canvas id="birthGenderChart"></canvas>
                 </div>
             </div>
 
             <div class="chart-grid">
                 <div class="chart-card">
-                    <div class="chart-title">Birth Registration by District</div>
-                    <canvas id="birthDistrictChart"></canvas>
+                    <div class="chart-title">Place of Delivery</div>
+                    <canvas id="birthPlaceChart"></canvas>
                 </div>
 
                 <div class="chart-card">
-                    <div class="chart-title">Birth Attendant Types</div>
-                    <canvas id="birthAttendantChart"></canvas>
+                    <div class="chart-title">Birth Registration by District</div>
+                    <canvas id="birthDistrictChart"></canvas>
                 </div>
             </div>
 
@@ -524,20 +518,20 @@
                 </div>
 
                 <div class="chart-card">
-                    <div class="chart-title">Birth Weight Distribution</div>
-                    <canvas id="birthWeightChart"></canvas>
+                    <div class="chart-title">Leading Causes of Death</div>
+                    <canvas id="causesChart"></canvas>
                 </div>
             </div>
 
             <div class="chart-grid">
                 <div class="chart-card">
-                    <div class="chart-title">Leading Causes of Death</div>
-                    <canvas id="causesChart"></canvas>
+                    <div class="chart-title">Death Registration by District</div>
+                    <canvas id="districtChart"></canvas>
                 </div>
 
                 <div class="chart-card">
-                    <div class="chart-title">Death Registration by District</div>
-                    <canvas id="districtChart"></canvas>
+                    <div class="chart-title">Birth Weight Distribution</div>
+                    <canvas id="birthWeightChart"></canvas>
                 </div>
             </div>
 
@@ -700,7 +694,7 @@
 
         // Charts
         let trendsChart, ageDistributionChart, causesChart, districtChart;
-        let birthPlaceChart, birthDistrictChart, birthAttendantChart, birthWeightChart;
+        let birthGenderChart, birthPlaceChart, birthDistrictChart, birthWeightChart;
 
         // Initialize dashboard
         async function initDashboard() {
@@ -946,11 +940,6 @@
             document.getElementById('totalDeaths').textContent = deaths.length.toLocaleString();
             document.getElementById('totalVA').textContent = va.length.toLocaleString();
             
-            // Birth rate
-            const estimatedPopulation = 100000;
-            const birthRate = births.length > 0 ? ((births.length / estimatedPopulation) * 1000).toFixed(1) : 0;
-            document.getElementById('birthRate').textContent = birthRate;
-            
             // Birth sex distribution
             const maleBirths = births.filter(b => (b.sex || b.childSex || '').toLowerCase() === 'male').length;
             const femaleBirths = births.filter(b => (b.sex || b.childSex || '').toLowerCase() === 'female').length;
@@ -1000,9 +989,9 @@
         // Render charts
         function renderCharts() {
             renderTrendsChart();
+            renderBirthGenderChart();
             renderBirthPlaceChart();
             renderBirthDistrictChart();
-            renderBirthAttendantChart();
             renderAgeDistributionChart();
             renderBirthWeightChart();
             renderCausesChart();
@@ -1080,33 +1069,23 @@
             });
         }
 
-        function renderBirthPlaceChart() {
-            const ctx = document.getElementById('birthPlaceChart');
+        function renderBirthGenderChart() {
+            const ctx = document.getElementById('birthGenderChart');
             
-            const places = {
-                'Hospital': 0,
-                'Health Center': 0,
-                'Home': 0,
-                'Other': 0
-            };
+            const maleBirths = filteredData.births.filter(b => (b.sex || b.childSex || '').toLowerCase() === 'male').length;
+            const femaleBirths = filteredData.births.filter(b => (b.sex || b.childSex || '').toLowerCase() === 'female').length;
             
-            filteredData.births.forEach(b => {
-                const place = (b.placeOfDelivery || '').toLowerCase();
-                if (place.includes('hospital')) places['Hospital']++;
-                else if (place.includes('health') || place.includes('clinic')) places['Health Center']++;
-                else if (place.includes('home')) places['Home']++;
-                else places['Other']++;
-            });
+            if (birthGenderChart) birthGenderChart.destroy();
             
-            if (birthPlaceChart) birthPlaceChart.destroy();
-            
-            birthPlaceChart = new Chart(ctx, {
-                type: 'doughnut',
+            birthGenderChart = new Chart(ctx, {
+                type: 'pie',
                 data: {
-                    labels: Object.keys(places),
+                    labels: ['Male', 'Female'],
                     datasets: [{
-                        data: Object.values(places),
-                        backgroundColor: ['#10b981', '#3b82f6', '#8b5cf6', '#fbbf24']
+                        data: [maleBirths, femaleBirths],
+                        backgroundColor: ['#3b82f6', '#ec4899'],
+                        borderWidth: 2,
+                        borderColor: '#1a1f3a'
                     }]
                 },
                 options: {
@@ -1114,8 +1093,52 @@
                     maintainAspectRatio: false,
                     plugins: {
                         legend: { 
-                            position: 'right',
-                            labels: { color: '#94a3b8' }
+                            position: 'bottom',
+                            labels: { 
+                                color: '#94a3b8',
+                                padding: 15,
+                                font: { size: 13 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderBirthPlaceChart() {
+            const ctx = document.getElementById('birthPlaceChart');
+            
+            const hospital = filteredData.births.filter(b => {
+                const place = (b.placeOfDelivery || '').toLowerCase();
+                return place.includes('hospital') || place.includes('health') || place.includes('clinic') || place.includes('facility');
+            }).length;
+            
+            const home = filteredData.births.length - hospital;
+            
+            if (birthPlaceChart) birthPlaceChart.destroy();
+            
+            birthPlaceChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: ['Hospital/Facility', 'Home'],
+                    datasets: [{
+                        data: [hospital, home],
+                        backgroundColor: ['#10b981', '#8b5cf6'],
+                        borderWidth: 2,
+                        borderColor: '#1a1f3a'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { 
+                            position: 'bottom',
+                            labels: { 
+                                color: '#94a3b8',
+                                padding: 15,
+                                font: { size: 13 }
+                            }
                         }
                     }
                 }
@@ -1133,35 +1156,32 @@
             
             const sortedDistricts = Object.entries(districts)
                 .sort((a, b) => b[1] - a[1])
-                .slice(0, 10);
+                .slice(0, 8);
             
             if (birthDistrictChart) birthDistrictChart.destroy();
             
             birthDistrictChart = new Chart(ctx, {
-                type: 'bar',
+                type: 'pie',
                 data: {
                     labels: sortedDistricts.map(d => d[0]),
                     datasets: [{
-                        label: 'Births',
                         data: sortedDistricts.map(d => d[1]),
-                        backgroundColor: '#10b981'
+                        backgroundColor: ['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#ef4444', '#06b6d4', '#84cc16'],
+                        borderWidth: 2,
+                        borderColor: '#1a1f3a'
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { display: false }
-                    },
-                    scales: {
-                        y: { 
-                            beginAtZero: true,
-                            ticks: { color: '#94a3b8' },
-                            grid: { color: 'rgba(148, 163, 184, 0.1)' }
-                        },
-                        x: {
-                            ticks: { color: '#94a3b8' },
-                            grid: { display: false }
+                        legend: { 
+                            position: 'right',
+                            labels: { 
+                                color: '#94a3b8',
+                                padding: 10,
+                                font: { size: 12 }
+                            }
                         }
                     }
                 }
@@ -1227,30 +1247,27 @@
             if (birthWeightChart) birthWeightChart.destroy();
             
             birthWeightChart = new Chart(ctx, {
-                type: 'bar',
+                type: 'pie',
                 data: {
                     labels: Object.keys(weightCategories),
                     datasets: [{
-                        label: 'Number of Births',
                         data: Object.values(weightCategories),
-                        backgroundColor: ['#ef4444', '#10b981', '#fbbf24', '#94a3b8']
+                        backgroundColor: ['#ef4444', '#10b981', '#fbbf24', '#64748b'],
+                        borderWidth: 2,
+                        borderColor: '#1a1f3a'
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { display: false }
-                    },
-                    scales: {
-                        y: { 
-                            beginAtZero: true,
-                            ticks: { color: '#94a3b8' },
-                            grid: { color: 'rgba(148, 163, 184, 0.1)' }
-                        },
-                        x: {
-                            ticks: { color: '#94a3b8' },
-                            grid: { display: false }
+                        legend: { 
+                            position: 'bottom',
+                            labels: { 
+                                color: '#94a3b8',
+                                padding: 15,
+                                font: { size: 13 }
+                            }
                         }
                     }
                 }
@@ -1375,15 +1392,21 @@
                 districts[district] = (districts[district] || 0) + 1;
             });
             
+            const sortedDistricts = Object.entries(districts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 8);
+            
             if (districtChart) districtChart.destroy();
             
             districtChart = new Chart(ctx, {
-                type: 'doughnut',
+                type: 'pie',
                 data: {
-                    labels: Object.keys(districts),
+                    labels: sortedDistricts.map(d => d[0]),
                     datasets: [{
-                        data: Object.values(districts),
-                        backgroundColor: ['#3b82f6', '#8b5cf6', '#10b981', '#fbbf24', '#ef4444']
+                        data: sortedDistricts.map(d => d[1]),
+                        backgroundColor: ['#3b82f6', '#8b5cf6', '#10b981', '#fbbf24', '#ef4444', '#ec4899', '#06b6d4', '#f59e0b'],
+                        borderWidth: 2,
+                        borderColor: '#1a1f3a'
                     }]
                 },
                 options: {
@@ -1392,7 +1415,11 @@
                     plugins: {
                         legend: { 
                             position: 'right',
-                            labels: { color: '#94a3b8' }
+                            labels: { 
+                                color: '#94a3b8',
+                                padding: 10,
+                                font: { size: 12 }
+                            }
                         }
                     }
                 }
