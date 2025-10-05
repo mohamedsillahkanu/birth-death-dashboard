@@ -459,22 +459,73 @@
                 </div>
 
                 <div class="stat-card">
-                    <div class="stat-label">Medical Certifications</div>
-                    <div class="stat-value" id="certifiedPercent">0%</div>
-                    <div class="stat-change">of deaths certified by medical personnel</div>
+                    <div class="stat-label">Crude Birth Rate</div>
+                    <div class="stat-value" id="birthRate">0</div>
+                    <div class="stat-change">per 1,000 population</div>
+                </div>
+            </div>
+
+            <!-- Birth Analysis Section -->
+            <div class="chart-card" style="margin-bottom: 30px;">
+                <div class="chart-title">Birth Registration Overview</div>
+                <div class="stats-grid">
+                    <div class="stat-card" style="min-height: 100px;">
+                        <div class="stat-label">Male Births</div>
+                        <div class="stat-value" id="maleBirths" style="font-size: 28px;">0</div>
+                        <div class="stat-change" id="malePercent">0% of total</div>
+                    </div>
+                    <div class="stat-card" style="min-height: 100px;">
+                        <div class="stat-label">Female Births</div>
+                        <div class="stat-value" id="femaleBirths" style="font-size: 28px;">0</div>
+                        <div class="stat-change" id="femalePercent">0% of total</div>
+                    </div>
+                    <div class="stat-card" style="min-height: 100px;">
+                        <div class="stat-label">Hospital Deliveries</div>
+                        <div class="stat-value" id="hospitalBirths" style="font-size: 28px;">0%</div>
+                        <div class="stat-change" id="hospitalCount">0 births</div>
+                    </div>
+                    <div class="stat-card" style="min-height: 100px;">
+                        <div class="stat-label">Home Deliveries</div>
+                        <div class="stat-value" id="homeBirths" style="font-size: 28px;">0%</div>
+                        <div class="stat-change" id="homeCount">0 births</div>
+                    </div>
                 </div>
             </div>
 
             <!-- Charts -->
             <div class="chart-grid">
                 <div class="chart-card">
-                    <div class="chart-title">Registration Trends (Monthly)</div>
+                    <div class="chart-title">Birth & Death Registration Trends (Monthly)</div>
                     <canvas id="trendsChart"></canvas>
                 </div>
 
                 <div class="chart-card">
+                    <div class="chart-title">Births by Sex & Place of Delivery</div>
+                    <canvas id="birthPlaceChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-grid">
+                <div class="chart-card">
+                    <div class="chart-title">Birth Registration by District</div>
+                    <canvas id="birthDistrictChart"></canvas>
+                </div>
+
+                <div class="chart-card">
+                    <div class="chart-title">Birth Attendant Types</div>
+                    <canvas id="birthAttendantChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-grid">
+                <div class="chart-card">
                     <div class="chart-title">Deaths by Age Group & Sex</div>
                     <canvas id="ageDistributionChart"></canvas>
+                </div>
+
+                <div class="chart-card">
+                    <div class="chart-title">Birth Weight Distribution</div>
+                    <canvas id="birthWeightChart"></canvas>
                 </div>
             </div>
 
@@ -485,7 +536,7 @@
                 </div>
 
                 <div class="chart-card">
-                    <div class="chart-title">Registration by District</div>
+                    <div class="chart-title">Death Registration by District</div>
                     <canvas id="districtChart"></canvas>
                 </div>
             </div>
@@ -584,6 +635,26 @@
 
             <!-- Recent Registrations -->
             <div class="table-container">
+                <div class="chart-title">Recent Birth Registrations (Last 20)</div>
+                <table id="recentBirthsTable">
+                    <thead>
+                        <tr>
+                            <th>Date of Birth</th>
+                            <th>Child Name</th>
+                            <th>Sex</th>
+                            <th>District</th>
+                            <th>Place of Delivery</th>
+                            <th>Birth Weight (kg)</th>
+                            <th>Birth Attendant</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recentBirthsBody">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="table-container">
                 <div class="chart-title">Recent Death Registrations (Last 20)</div>
                 <table id="recentDeathsTable">
                     <thead>
@@ -629,6 +700,7 @@
 
         // Charts
         let trendsChart, ageDistributionChart, causesChart, districtChart;
+        let birthPlaceChart, birthDistrictChart, birthAttendantChart, birthWeightChart;
 
         // Initialize dashboard
         async function initDashboard() {
@@ -637,7 +709,7 @@
             renderDashboard();
         }
 
-        // Load data from Google Sheets - FIXED VERSION
+        // Load data from Google Sheets
         async function loadData() {
             try {
                 if (SCRIPT_URL === 'YOUR_GOOGLE_APPS_SCRIPT_URL_HERE') {
@@ -645,7 +717,6 @@
                     return;
                 }
 
-                // Fetch data from Google Sheets
                 const response = await fetch(SCRIPT_URL);
                 
                 if (!response.ok) {
@@ -654,8 +725,7 @@
                 
                 const allData = await response.json();
                 
-                // The data comes as a flat array - we need to categorize it
-                // Check what type of data we have based on field names
+                // Categorize data based on field names
                 dashboardData.births = allData.filter(item => 
                     item.dateOfBirth || item.birthDate || item.childName || 
                     Object.keys(item).some(key => key.toLowerCase().includes('birth'))
@@ -671,7 +741,6 @@
                     Object.keys(item).some(key => key.toLowerCase().includes('verbal') || key.toLowerCase().includes('autopsy'))
                 );
                 
-                // If we can't categorize, put everything in deaths
                 if (dashboardData.births.length === 0 && dashboardData.deaths.length === 0 && dashboardData.verbalAutopsies.length === 0) {
                     dashboardData.deaths = allData;
                 }
@@ -743,17 +812,15 @@
                 regionFilter.appendChild(option);
             });
             
-            // Initial filter application
             applyFilters();
         }
 
-        // Handle region change - cascading to district
+        // Handle region change
         function handleRegionChange() {
             const selectedRegion = document.getElementById('regionFilter').value;
             const districtFilter = document.getElementById('districtFilter');
             const chiefdomFilter = document.getElementById('chiefdomFilter');
             
-            // Clear district and chiefdom
             districtFilter.innerHTML = '<option value="all">All Districts</option>';
             chiefdomFilter.innerHTML = '<option value="all">All Chiefdoms</option>';
             
@@ -766,7 +833,6 @@
                     districtFilter.appendChild(option);
                 });
             } else if (selectedRegion === 'all') {
-                // Show all districts
                 const allDistricts = new Set();
                 Object.values(regionDistrictMap).forEach(districts => {
                     districts.forEach(d => allDistricts.add(d));
@@ -782,12 +848,11 @@
             applyFilters();
         }
 
-        // Handle district change - cascading to chiefdom
+        // Handle district change
         function handleDistrictChange() {
             const selectedDistrict = document.getElementById('districtFilter').value;
             const chiefdomFilter = document.getElementById('chiefdomFilter');
             
-            // Clear chiefdom
             chiefdomFilter.innerHTML = '<option value="all">All Chiefdoms</option>';
             
             if (selectedDistrict !== 'all' && districtChiefdomMap[selectedDistrict]) {
@@ -799,7 +864,6 @@
                     chiefdomFilter.appendChild(option);
                 });
             } else if (selectedDistrict === 'all') {
-                // Show all chiefdoms
                 const allChiefdoms = new Set();
                 Object.values(districtChiefdomMap).forEach(chiefdoms => {
                     chiefdoms.forEach(c => allChiefdoms.add(c));
@@ -832,19 +896,10 @@
                     const itemDistrict = item.district;
                     const itemChiefdom = item.chiefdom;
                     
-                    // Year filter
                     if (yearFilter !== 'all' && itemYear != yearFilter) return false;
-                    
-                    // Month filter
                     if (monthFilter !== 'all' && itemMonth != monthFilter) return false;
-                    
-                    // Region filter
                     if (regionFilter !== 'all' && itemRegion !== regionFilter) return false;
-                    
-                    // District filter
                     if (districtFilter !== 'all' && itemDistrict !== districtFilter) return false;
-                    
-                    // Chiefdom filter
                     if (chiefdomFilter !== 'all' && itemChiefdom !== chiefdomFilter) return false;
                     
                     return true;
@@ -855,7 +910,6 @@
             filteredData.deaths = filterData(dashboardData.deaths);
             filteredData.verbalAutopsies = filterData(dashboardData.verbalAutopsies);
             
-            // Re-render dashboard with filtered data
             updateStatistics();
             renderCharts();
             renderTables();
@@ -869,7 +923,6 @@
             document.getElementById('districtFilter').innerHTML = '<option value="all">All Districts</option>';
             document.getElementById('chiefdomFilter').innerHTML = '<option value="all">All Chiefdoms</option>';
             
-            // Repopulate district and chiefdom dropdowns
             handleRegionChange();
         }
 
@@ -893,10 +946,43 @@
             document.getElementById('totalDeaths').textContent = deaths.length.toLocaleString();
             document.getElementById('totalVA').textContent = va.length.toLocaleString();
             
-            // Medical certification rate
-            const certifiedDeaths = deaths.filter(d => d.certifierName).length;
-            const certPercent = deaths.length > 0 ? Math.round((certifiedDeaths / deaths.length) * 100) : 0;
-            document.getElementById('certifiedPercent').textContent = certPercent + '%';
+            // Birth rate
+            const estimatedPopulation = 100000;
+            const birthRate = births.length > 0 ? ((births.length / estimatedPopulation) * 1000).toFixed(1) : 0;
+            document.getElementById('birthRate').textContent = birthRate;
+            
+            // Birth sex distribution
+            const maleBirths = births.filter(b => (b.sex || b.childSex || '').toLowerCase() === 'male').length;
+            const femaleBirths = births.filter(b => (b.sex || b.childSex || '').toLowerCase() === 'female').length;
+            
+            document.getElementById('maleBirths').textContent = maleBirths.toLocaleString();
+            document.getElementById('femaleBirths').textContent = femaleBirths.toLocaleString();
+            
+            const malePercent = births.length > 0 ? Math.round((maleBirths / births.length) * 100) : 0;
+            const femalePercent = births.length > 0 ? Math.round((femaleBirths / births.length) * 100) : 0;
+            
+            document.getElementById('malePercent').textContent = malePercent + '% of total';
+            document.getElementById('femalePercent').textContent = femalePercent + '% of total';
+            
+            // Hospital vs Home deliveries
+            const hospitalBirths = births.filter(b => {
+                const place = (b.placeOfDelivery || '').toLowerCase();
+                return place.includes('hospital') || place.includes('health') || place.includes('clinic') || place.includes('facility');
+            }).length;
+            
+            const homeBirths = births.filter(b => {
+                const place = (b.placeOfDelivery || '').toLowerCase();
+                return place.includes('home');
+            }).length;
+            
+            const hospitalPercent = births.length > 0 ? Math.round((hospitalBirths / births.length) * 100) : 0;
+            const homePercent = births.length > 0 ? Math.round((homeBirths / births.length) * 100) : 0;
+            
+            document.getElementById('hospitalBirths').textContent = hospitalPercent + '%';
+            document.getElementById('hospitalCount').textContent = hospitalBirths.toLocaleString() + ' births';
+            
+            document.getElementById('homeBirths').textContent = homePercent + '%';
+            document.getElementById('homeCount').textContent = homeBirths.toLocaleString() + ' births';
             
             // Maternal deaths
             const maternalDeaths = deaths.filter(d => d.maternalDeath && d.maternalDeath !== 'No');
@@ -906,7 +992,6 @@
             const mmr = Math.round((maternalDeaths.length / liveBirths) * 100000);
             document.getElementById('mmr').textContent = mmr.toLocaleString();
             
-            // Maternal certification
             const maternalCertified = maternalDeaths.filter(d => d.certifierName).length;
             const maternalCertPercent = maternalDeaths.length > 0 ? Math.round((maternalCertified / maternalDeaths.length) * 100) : 0;
             document.getElementById('maternalCertified').textContent = maternalCertPercent + '%';
@@ -915,7 +1000,11 @@
         // Render charts
         function renderCharts() {
             renderTrendsChart();
+            renderBirthPlaceChart();
+            renderBirthDistrictChart();
+            renderBirthAttendantChart();
             renderAgeDistributionChart();
+            renderBirthWeightChart();
             renderCausesChart();
             renderDistrictChart();
         }
@@ -923,15 +1012,24 @@
         function renderTrendsChart() {
             const ctx = document.getElementById('trendsChart');
             
-            // Group by month
-            const monthlyData = {};
-            filteredData.deaths.forEach(d => {
-                const month = new Date(d.timestamp || d.dateOfDeath).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-                monthlyData[month] = (monthlyData[month] || 0) + 1;
+            const monthlyBirths = {};
+            const monthlyDeaths = {};
+            
+            filteredData.births.forEach(b => {
+                const month = new Date(b.timestamp || b.dateOfBirth || b.birthDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                monthlyBirths[month] = (monthlyBirths[month] || 0) + 1;
             });
             
-            const labels = Object.keys(monthlyData).slice(-6);
-            const data = labels.map(l => monthlyData[l] || 0);
+            filteredData.deaths.forEach(d => {
+                const month = new Date(d.timestamp || d.dateOfDeath).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                monthlyDeaths[month] = (monthlyDeaths[month] || 0) + 1;
+            });
+            
+            const allMonths = [...new Set([...Object.keys(monthlyBirths), ...Object.keys(monthlyDeaths)])].sort();
+            const labels = allMonths.slice(-12);
+            
+            const birthData = labels.map(l => monthlyBirths[l] || 0);
+            const deathData = labels.map(l => monthlyDeaths[l] || 0);
             
             if (trendsChart) trendsChart.destroy();
             
@@ -939,13 +1037,203 @@
                 type: 'line',
                 data: {
                     labels: labels,
+                    datasets: [
+                        {
+                            label: 'Births',
+                            data: birthData,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: 'Deaths',
+                            data: deathData,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { 
+                            display: true,
+                            labels: { color: '#94a3b8' }
+                        }
+                    },
+                    scales: {
+                        y: { 
+                            beginAtZero: true,
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                        },
+                        x: {
+                            ticks: { color: '#94a3b8' },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderBirthPlaceChart() {
+            const ctx = document.getElementById('birthPlaceChart');
+            
+            const places = {
+                'Hospital': 0,
+                'Health Center': 0,
+                'Home': 0,
+                'Other': 0
+            };
+            
+            filteredData.births.forEach(b => {
+                const place = (b.placeOfDelivery || '').toLowerCase();
+                if (place.includes('hospital')) places['Hospital']++;
+                else if (place.includes('health') || place.includes('clinic')) places['Health Center']++;
+                else if (place.includes('home')) places['Home']++;
+                else places['Other']++;
+            });
+            
+            if (birthPlaceChart) birthPlaceChart.destroy();
+            
+            birthPlaceChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(places),
                     datasets: [{
-                        label: 'Death Registrations',
-                        data: data,
-                        borderColor: '#3b82f6',
-                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                        tension: 0.4,
-                        fill: true
+                        data: Object.values(places),
+                        backgroundColor: ['#10b981', '#3b82f6', '#8b5cf6', '#fbbf24']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { 
+                            position: 'right',
+                            labels: { color: '#94a3b8' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderBirthDistrictChart() {
+            const ctx = document.getElementById('birthDistrictChart');
+            
+            const districts = {};
+            filteredData.births.forEach(b => {
+                const district = b.district || 'Unknown';
+                districts[district] = (districts[district] || 0) + 1;
+            });
+            
+            const sortedDistricts = Object.entries(districts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+            
+            if (birthDistrictChart) birthDistrictChart.destroy();
+            
+            birthDistrictChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sortedDistricts.map(d => d[0]),
+                    datasets: [{
+                        label: 'Births',
+                        data: sortedDistricts.map(d => d[1]),
+                        backgroundColor: '#10b981'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { 
+                            beginAtZero: true,
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                        },
+                        x: {
+                            ticks: { color: '#94a3b8' },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderBirthAttendantChart() {
+            const ctx = document.getElementById('birthAttendantChart');
+            
+            const attendants = {};
+            filteredData.births.forEach(b => {
+                const attendant = b.birthAttendant || 'Unknown';
+                attendants[attendant] = (attendants[attendant] || 0) + 1;
+            });
+            
+            if (birthAttendantChart) birthAttendantChart.destroy();
+            
+            birthAttendantChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(attendants),
+                    datasets: [{
+                        data: Object.values(attendants),
+                        backgroundColor: ['#10b981', '#3b82f6', '#8b5cf6', '#fbbf24', '#ef4444']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { 
+                            position: 'right',
+                            labels: { color: '#94a3b8' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderBirthWeightChart() {
+            const ctx = document.getElementById('birthWeightChart');
+            
+            const weightCategories = {
+                'Low (<2.5kg)': 0,
+                'Normal (2.5-4kg)': 0,
+                'High (>4kg)': 0,
+                'Unknown': 0
+            };
+            
+            filteredData.births.forEach(b => {
+                const weight = parseFloat(b.birthWeight || b.weight);
+                if (!weight || isNaN(weight)) {
+                    weightCategories['Unknown']++;
+                } else if (weight < 2.5) {
+                    weightCategories['Low (<2.5kg)']++;
+                } else if (weight <= 4) {
+                    weightCategories['Normal (2.5-4kg)']++;
+                } else {
+                    weightCategories['High (>4kg)']++;
+                }
+            });
+            
+            if (birthWeightChart) birthWeightChart.destroy();
+            
+            birthWeightChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(weightCategories),
+                    datasets: [{
+                        label: 'Number of Births',
+                        data: Object.values(weightCategories),
+                        backgroundColor: ['#ef4444', '#10b981', '#fbbf24', '#94a3b8']
                     }]
                 },
                 options: {
@@ -1115,6 +1403,7 @@
         function renderTables() {
             renderExternalCausesTable();
             renderQualityTable();
+            renderRecentBirthsTable();
             renderRecentDeathsTable();
         }
 
@@ -1184,6 +1473,37 @@
                 `;
                 tbody.innerHTML += row;
             });
+        }
+
+        function renderRecentBirthsTable() {
+            const tbody = document.getElementById('recentBirthsBody');
+            tbody.innerHTML = '';
+            
+            const recent = [...filteredData.births]
+                .sort((a, b) => new Date(b.timestamp || b.dateOfBirth || b.birthDate) - new Date(a.timestamp || a.dateOfBirth || a.birthDate))
+                .slice(0, 20);
+            
+            recent.forEach(b => {
+                const birthDate = new Date(b.timestamp || b.dateOfBirth || b.birthDate);
+                const weight = b.birthWeight || b.weight || 'N/A';
+                
+                const row = `
+                    <tr>
+                        <td>${birthDate.toLocaleDateString()}</td>
+                        <td>${b.childName || b.name || 'N/A'}</td>
+                        <td>${b.sex || b.childSex || 'N/A'}</td>
+                        <td>${b.district || 'N/A'}</td>
+                        <td>${b.placeOfDelivery || 'N/A'}</td>
+                        <td>${weight}</td>
+                        <td>${b.birthAttendant || 'N/A'}</td>
+                    </tr>
+                `;
+                tbody.innerHTML += row;
+            });
+            
+            if (recent.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #94a3b8;">No birth records found</td></tr>';
+            }
         }
 
         function renderRecentDeathsTable() {
