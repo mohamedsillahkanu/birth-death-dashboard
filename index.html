@@ -1,4 +1,4 @@
-<!DOCTYPE html>    
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -428,8 +428,7 @@
 
         <div id="loadingIndicator" class="loading">
             <div class="spinner"></div>
-            <p id="loadingText">Initializing dashboard...</p>
-            <p style="font-size: 12px; color: #64748b; margin-top: 10px;" id="loadingSubtext">Please wait</p>
+            <p>Loading dashboard data...</p>
         </div>
 
         <div id="dashboardContent" style="display: none;">
@@ -490,25 +489,25 @@
             <!-- Charts -->
             <div class="chart-grid">
                 <div class="chart-card">
-                    <div class="chart-title">Births by Gender</div>
-                    <canvas id="birthGenderChart"></canvas>
+                    <div class="chart-title">Birth & Death Registration Trends (Monthly)</div>
+                    <canvas id="trendsChart"></canvas>
                 </div>
 
                 <div class="chart-card">
-                    <div class="chart-title">Place of Birth</div>
-                    <canvas id="birthPlaceChart"></canvas>
+                    <div class="chart-title">Births by Gender</div>
+                    <canvas id="birthGenderChart"></canvas>
                 </div>
             </div>
 
             <div class="chart-grid">
                 <div class="chart-card">
-                    <div class="chart-title">Birth Registration by District</div>
-                    <canvas id="birthDistrictChart"></canvas>
+                    <div class="chart-title">Place of Delivery</div>
+                    <canvas id="birthPlaceChart"></canvas>
                 </div>
 
                 <div class="chart-card">
-                    <div class="chart-title">Birth Weight Distribution</div>
-                    <canvas id="birthWeightChart"></canvas>
+                    <div class="chart-title">Birth Registration by District</div>
+                    <canvas id="birthDistrictChart"></canvas>
                 </div>
             </div>
 
@@ -638,7 +637,7 @@
                             <th>Child Name</th>
                             <th>Sex</th>
                             <th>District</th>
-                            <th>Place of Birth</th>
+                            <th>Place of Delivery</th>
                             <th>Birth Weight (kg)</th>
                             <th>Birth Attendant</th>
                         </tr>
@@ -694,38 +693,14 @@
         let districtChiefdomMap = {};
 
         // Charts
-        let ageDistributionChart, causesChart, districtChart;
+        let trendsChart, ageDistributionChart, causesChart, districtChart;
         let birthGenderChart, birthPlaceChart, birthDistrictChart, birthWeightChart;
 
         // Initialize dashboard
         async function initDashboard() {
-            console.log('Starting dashboard initialization...');
-            
-            updateLoadingText('Loading data from Google Sheets...');
             await loadData();
-            
-            updateLoadingText('Processing filters...');
-            await sleep(100); // Small delay for UI update
             populateFilters();
-            
-            updateLoadingText('Rendering dashboard...');
-            await sleep(100);
             renderDashboard();
-            
-            console.log('Dashboard initialization complete!');
-        }
-
-        // Helper function to update loading text
-        function updateLoadingText(text, subtext = '') {
-            const loadingText = document.getElementById('loadingText');
-            const loadingSubtext = document.getElementById('loadingSubtext');
-            if (loadingText) loadingText.textContent = text;
-            if (loadingSubtext) loadingSubtext.textContent = subtext;
-        }
-
-        // Helper function for delays
-        function sleep(ms) {
-            return new Promise(resolve => setTimeout(resolve, ms));
         }
 
         // Load data from Google Sheets
@@ -736,80 +711,38 @@
                     return;
                 }
 
-                console.log('Fetching data from Google Sheets...');
-                const startTime = Date.now();
-                
-                // Add timeout to detect slow responses
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-                
-                const response = await fetch(SCRIPT_URL, { signal: controller.signal });
-                clearTimeout(timeoutId);
+                const response = await fetch(SCRIPT_URL);
                 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 
                 const allData = await response.json();
-                const fetchTime = Date.now() - startTime;
-                console.log(`Data fetched in ${fetchTime}ms. Records: ${allData.length}`);
-                console.log('Sample record:', allData[0]);
                 
-                // Use your exact field names for categorization
+                // Categorize data based on field names
                 dashboardData.births = allData.filter(item => 
-                    item.childName || item.dateOfBirth || item.placeOfBirth || item.motherName
+                    item.dateOfBirth || item.birthDate || item.childName || 
+                    Object.keys(item).some(key => key.toLowerCase().includes('birth'))
                 );
                 
                 dashboardData.deaths = allData.filter(item => 
-                    item.deceasedName || item.dateOfDeath || item.ageAtDeath || item.underlyingCause
+                    item.dateOfDeath || item.deathDate || item.deceasedName || item.ageAtDeath ||
+                    Object.keys(item).some(key => key.toLowerCase().includes('death') || key.toLowerCase().includes('deceased'))
                 );
                 
                 dashboardData.verbalAutopsies = allData.filter(item => 
-                    item.verbalAutopsy || item.vaDate
+                    item.verbalAutopsy || item.vaDate ||
+                    Object.keys(item).some(key => key.toLowerCase().includes('verbal') || key.toLowerCase().includes('autopsy'))
                 );
                 
-                // If all records have childName, they're all births
-                if (dashboardData.births.length === allData.length) {
-                    dashboardData.deaths = [];
-                    dashboardData.verbalAutopsies = [];
+                if (dashboardData.births.length === 0 && dashboardData.deaths.length === 0 && dashboardData.verbalAutopsies.length === 0) {
+                    dashboardData.deaths = allData;
                 }
-                
-                console.log(`Categorized - Births: ${dashboardData.births.length}, Deaths: ${dashboardData.deaths.length}, VA: ${dashboardData.verbalAutopsies.length}`);
                 
                 document.getElementById('lastUpdate').textContent = new Date().toLocaleString();
             } catch (error) {
                 console.error('Error loading data:', error);
-                
-                if (error.name === 'AbortError') {
-                    document.getElementById('loadingIndicator').innerHTML = `
-                        <div style="color: #ef4444;">
-                            <p><strong>⚠️ Request Timeout</strong></p>
-                            <p>The Google Apps Script is taking too long to respond (>30 seconds)</p>
-                            <p style="margin-top: 15px; font-size: 14px;">Possible causes:</p>
-                            <ul style="text-align: left; display: inline-block; font-size: 13px;">
-                                <li>Apps Script is sleeping (not recently accessed)</li>
-                                <li>Script has errors or infinite loops</li>
-                                <li>Network connectivity issues</li>
-                            </ul>
-                            <button class="btn" onclick="location.reload()" style="margin-top: 20px;">Retry</button>
-                        </div>
-                    `;
-                } else {
-                    document.getElementById('loadingIndicator').innerHTML = `
-                        <div style="color: #ef4444;">
-                            <p><strong>❌ Error Loading Data</strong></p>
-                            <p>${error.message}</p>
-                            <p style="margin-top: 15px; font-size: 14px;">Troubleshooting steps:</p>
-                            <ul style="text-align: left; display: inline-block; font-size: 13px;">
-                                <li>Test the Apps Script URL directly in your browser</li>
-                                <li>Verify deployment settings (Anyone can access)</li>
-                                <li>Check browser console (F12) for details</li>
-                                <li>Ensure CORS is enabled in Apps Script</li>
-                            </ul>
-                            <button class="btn" onclick="location.reload()" style="margin-top: 20px;">Retry</button>
-                        </div>
-                    `;
-                }
+                alert('Error loading data from Google Sheets. Please check your Apps Script URL and permissions.\n\nError: ' + error.message);
             }
         }
 
@@ -989,19 +922,12 @@
 
         // Render dashboard
         function renderDashboard() {
-            console.log('Rendering dashboard components...');
-            
             document.getElementById('loadingIndicator').style.display = 'none';
             document.getElementById('dashboardContent').style.display = 'block';
-            
-            const renderStart = Date.now();
             
             updateStatistics();
             renderCharts();
             renderTables();
-            
-            const renderTime = Date.now() - renderStart;
-            console.log(`Dashboard rendered in ${renderTime}ms`);
         }
 
         // Update statistics
@@ -1029,11 +955,14 @@
             
             // Hospital vs Home deliveries
             const hospitalBirths = births.filter(b => {
-                const place = (b.placeOfBirth || '').toLowerCase();
+                const place = (b.placeOfDelivery || '').toLowerCase();
                 return place.includes('hospital') || place.includes('health') || place.includes('clinic') || place.includes('facility');
             }).length;
             
-            const homeBirths = births.length - hospitalBirths;
+            const homeBirths = births.filter(b => {
+                const place = (b.placeOfDelivery || '').toLowerCase();
+                return place.includes('home');
+            }).length;
             
             const hospitalPercent = births.length > 0 ? Math.round((hospitalBirths / births.length) * 100) : 0;
             const homePercent = births.length > 0 ? Math.round((homeBirths / births.length) * 100) : 0;
@@ -1059,16 +988,88 @@
 
         // Render charts
         function renderCharts() {
+            renderTrendsChart();
             renderBirthGenderChart();
             renderBirthPlaceChart();
             renderBirthDistrictChart();
-            renderBirthWeightChart();
             renderAgeDistributionChart();
+            renderBirthWeightChart();
             renderCausesChart();
             renderDistrictChart();
         }
 
         function renderTrendsChart() {
+            const ctx = document.getElementById('trendsChart');
+            
+            const monthlyBirths = {};
+            const monthlyDeaths = {};
+            
+            filteredData.births.forEach(b => {
+                const month = new Date(b.timestamp || b.dateOfBirth || b.birthDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                monthlyBirths[month] = (monthlyBirths[month] || 0) + 1;
+            });
+            
+            filteredData.deaths.forEach(d => {
+                const month = new Date(d.timestamp || d.dateOfDeath).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                monthlyDeaths[month] = (monthlyDeaths[month] || 0) + 1;
+            });
+            
+            const allMonths = [...new Set([...Object.keys(monthlyBirths), ...Object.keys(monthlyDeaths)])].sort();
+            const labels = allMonths.slice(-12);
+            
+            const birthData = labels.map(l => monthlyBirths[l] || 0);
+            const deathData = labels.map(l => monthlyDeaths[l] || 0);
+            
+            if (trendsChart) trendsChart.destroy();
+            
+            trendsChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Births',
+                            data: birthData,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        },
+                        {
+                            label: 'Deaths',
+                            data: deathData,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { 
+                            display: true,
+                            labels: { color: '#94a3b8' }
+                        }
+                    },
+                    scales: {
+                        y: { 
+                            beginAtZero: true,
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: 'rgba(148, 163, 184, 0.1)' }
+                        },
+                        x: {
+                            ticks: { color: '#94a3b8' },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderBirthGenderChart() {
             const ctx = document.getElementById('birthGenderChart');
             
             const maleBirths = filteredData.births.filter(b => (b.sex || b.childSex || '').toLowerCase() === 'male').length;
@@ -1181,17 +1182,6 @@
                                 padding: 10,
                                 font: { size: 12 }
                             }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const label = context.label || '';
-                                    const value = context.parsed;
-                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                    const percentage = ((value / total) * 100).toFixed(1);
-                                    return `${label}: ${percentage}% (${value})`;
-                                }
-                            }
                         }
                     }
                 }
@@ -1277,17 +1267,6 @@
                                 color: '#94a3b8',
                                 padding: 15,
                                 font: { size: 13 }
-                            }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const label = context.label || '';
-                                    const value = context.parsed;
-                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                    const percentage = ((value / total) * 100).toFixed(1);
-                                    return `${label}: ${percentage}% (${value})`;
-                                }
                             }
                         }
                     }
@@ -1441,17 +1420,6 @@
                                 padding: 10,
                                 font: { size: 12 }
                             }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const label = context.label || '';
-                                    const value = context.parsed;
-                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                    const percentage = ((value / total) * 100).toFixed(1);
-                                    return `${label}: ${percentage}% (${value})`;
-                                }
-                            }
                         }
                     }
                 }
@@ -1552,7 +1520,7 @@
                         <td>${b.childName || b.name || 'N/A'}</td>
                         <td>${b.sex || b.childSex || 'N/A'}</td>
                         <td>${b.district || 'N/A'}</td>
-                        <td>${b.placeOfBirth || 'N/A'}</td>
+                        <td>${b.placeOfDelivery || 'N/A'}</td>
                         <td>${weight}</td>
                         <td>${b.birthAttendant || 'N/A'}</td>
                     </tr>
