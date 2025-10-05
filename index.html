@@ -1,4 +1,4 @@
-<!DOCTYPE html>    
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -428,7 +428,8 @@
 
         <div id="loadingIndicator" class="loading">
             <div class="spinner"></div>
-            <p>Loading dashboard data...</p>
+            <p id="loadingText">Initializing dashboard...</p>
+            <p style="font-size: 12px; color: #64748b; margin-top: 10px;" id="loadingSubtext">Please wait</p>
         </div>
 
         <div id="dashboardContent" style="display: none;">
@@ -698,9 +699,33 @@
 
         // Initialize dashboard
         async function initDashboard() {
+            console.log('Starting dashboard initialization...');
+            
+            updateLoadingText('Loading data from Google Sheets...');
             await loadData();
+            
+            updateLoadingText('Processing filters...');
+            await sleep(100); // Small delay for UI update
             populateFilters();
+            
+            updateLoadingText('Rendering dashboard...');
+            await sleep(100);
             renderDashboard();
+            
+            console.log('Dashboard initialization complete!');
+        }
+
+        // Helper function to update loading text
+        function updateLoadingText(text, subtext = '') {
+            const loadingText = document.getElementById('loadingText');
+            const loadingSubtext = document.getElementById('loadingSubtext');
+            if (loadingText) loadingText.textContent = text;
+            if (loadingSubtext) loadingSubtext.textContent = subtext;
+        }
+
+        // Helper function for delays
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
         }
 
         // Load data from Google Sheets
@@ -711,38 +736,80 @@
                     return;
                 }
 
-                const response = await fetch(SCRIPT_URL);
+                console.log('Fetching data from Google Sheets...');
+                const startTime = Date.now();
+                
+                // Add timeout to detect slow responses
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+                
+                const response = await fetch(SCRIPT_URL, { signal: controller.signal });
+                clearTimeout(timeoutId);
                 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 
                 const allData = await response.json();
+                const fetchTime = Date.now() - startTime;
+                console.log(`Data fetched in ${fetchTime}ms. Records: ${allData.length}`);
+                console.log('Sample record:', allData[0]);
                 
-                // Categorize data based on field names
+                // Use your exact field names for categorization
                 dashboardData.births = allData.filter(item => 
-                    item.dateOfBirth || item.birthDate || item.childName || 
-                    Object.keys(item).some(key => key.toLowerCase().includes('birth'))
+                    item.childName || item.dateOfBirth || item.placeOfBirth || item.motherName
                 );
                 
                 dashboardData.deaths = allData.filter(item => 
-                    item.dateOfDeath || item.deathDate || item.deceasedName || item.ageAtDeath ||
-                    Object.keys(item).some(key => key.toLowerCase().includes('death') || key.toLowerCase().includes('deceased'))
+                    item.deceasedName || item.dateOfDeath || item.ageAtDeath || item.underlyingCause
                 );
                 
                 dashboardData.verbalAutopsies = allData.filter(item => 
-                    item.verbalAutopsy || item.vaDate ||
-                    Object.keys(item).some(key => key.toLowerCase().includes('verbal') || key.toLowerCase().includes('autopsy'))
+                    item.verbalAutopsy || item.vaDate
                 );
                 
-                if (dashboardData.births.length === 0 && dashboardData.deaths.length === 0 && dashboardData.verbalAutopsies.length === 0) {
-                    dashboardData.deaths = allData;
+                // If all records have childName, they're all births
+                if (dashboardData.births.length === allData.length) {
+                    dashboardData.deaths = [];
+                    dashboardData.verbalAutopsies = [];
                 }
+                
+                console.log(`Categorized - Births: ${dashboardData.births.length}, Deaths: ${dashboardData.deaths.length}, VA: ${dashboardData.verbalAutopsies.length}`);
                 
                 document.getElementById('lastUpdate').textContent = new Date().toLocaleString();
             } catch (error) {
                 console.error('Error loading data:', error);
-                alert('Error loading data from Google Sheets. Please check your Apps Script URL and permissions.\n\nError: ' + error.message);
+                
+                if (error.name === 'AbortError') {
+                    document.getElementById('loadingIndicator').innerHTML = `
+                        <div style="color: #ef4444;">
+                            <p><strong>⚠️ Request Timeout</strong></p>
+                            <p>The Google Apps Script is taking too long to respond (>30 seconds)</p>
+                            <p style="margin-top: 15px; font-size: 14px;">Possible causes:</p>
+                            <ul style="text-align: left; display: inline-block; font-size: 13px;">
+                                <li>Apps Script is sleeping (not recently accessed)</li>
+                                <li>Script has errors or infinite loops</li>
+                                <li>Network connectivity issues</li>
+                            </ul>
+                            <button class="btn" onclick="location.reload()" style="margin-top: 20px;">Retry</button>
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('loadingIndicator').innerHTML = `
+                        <div style="color: #ef4444;">
+                            <p><strong>❌ Error Loading Data</strong></p>
+                            <p>${error.message}</p>
+                            <p style="margin-top: 15px; font-size: 14px;">Troubleshooting steps:</p>
+                            <ul style="text-align: left; display: inline-block; font-size: 13px;">
+                                <li>Test the Apps Script URL directly in your browser</li>
+                                <li>Verify deployment settings (Anyone can access)</li>
+                                <li>Check browser console (F12) for details</li>
+                                <li>Ensure CORS is enabled in Apps Script</li>
+                            </ul>
+                            <button class="btn" onclick="location.reload()" style="margin-top: 20px;">Retry</button>
+                        </div>
+                    `;
+                }
             }
         }
 
@@ -922,12 +989,19 @@
 
         // Render dashboard
         function renderDashboard() {
+            console.log('Rendering dashboard components...');
+            
             document.getElementById('loadingIndicator').style.display = 'none';
             document.getElementById('dashboardContent').style.display = 'block';
+            
+            const renderStart = Date.now();
             
             updateStatistics();
             renderCharts();
             renderTables();
+            
+            const renderTime = Date.now() - renderStart;
+            console.log(`Dashboard rendered in ${renderTime}ms`);
         }
 
         // Update statistics
